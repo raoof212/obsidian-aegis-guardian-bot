@@ -12,7 +12,12 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 # إذا تم كشفه سابقاً، اذهب إلى @BotFather فوراً:
 # /mybots > @ObsidianAegisBot > API Token > Revoke current token
 # ثم استخدم المفتاح الجديد هنا.
-TOKEN = "أدخل_التوكن_الجديد_هنا"  # استبدل هذا السطر بالتوكن الجديد
+import os
+
+# التوكن يُقرأ من متغيرات البيئة، ولا يُكشف في الكود
+TOKEN = os.environ.get("TOKEN")
+if not TOKEN:
+    raise ValueError("لم يتم العثور على TOKEN في متغيرات البيئة.")
 
 # قائمة سوداء مبدئية بالروابط الخبيثة (سيتم توسيعها لاحقاً)
 BLACKLISTED_DOMAINS = [
