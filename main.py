@@ -3,7 +3,8 @@ import logging
 import logging
 import re
 from urllib.parse import urlparse
-
+from telegram import __version__ as tg_version
+print(f"python-telegram-bot version: {tg_version}")
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
