@@ -1,10 +1,8 @@
 import os
 import logging
-import logging
 import re
 from urllib.parse import urlparse
-from telegram import __version__ as tg_version
-print(f"python-telegram-bot version: {tg_version}")
+
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
@@ -17,11 +15,11 @@ if not TOKEN:
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY غير موجود في متغيرات البيئة")
 
-# تهيئة مكتبة google-genai الجديدة
+# تهيئة مكتبة google-genai
 from google import genai
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-MODEL_NAME = "gemini-2.0-flash"  # النموذج الأحدث (مدفوع الأجر لكن لك 1500 طلب مجاني يومياً)
+MODEL_NAME = "gemini-2.0-flash"
 
 # قائمة سوداء مبدئية (للاستخدام إذا فشل الذكاء الاصطناعي)
 BLACKLISTED_DOMAINS = [
@@ -54,19 +52,16 @@ async def analyze_with_gemini(text: str) -> str | None:
     """
 
     try:
-        logger.info(f"🚀 محاولة استدعاء Gemini بالنموذج: {MODEL_NAME}")
         response = client.models.generate_content(
             model=MODEL_NAME,
             contents=prompt
         )
-        logger.info(f"✅ استجابة Gemini الخام: {response}")
         result = response.text.strip()
         if not result:
-            logger.warning("⚠️ استجابة Gemini فارغة")
             return None
         return f"🧠 **تحليل ذكي:**\n{result}"
     except Exception as e:
-        logger.error(f"❌ خطأ في Gemini: {type(e).__name__} - {e}")
+        logger.error(f"خطأ في Gemini: {e}")
         return None
 
 # ================== التحليل التقليدي (احتياطي) ==================
@@ -102,6 +97,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     await update.message.reply_text(welcome_msg, parse_mode='Markdown')
 
+async def upgrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = "🚀 للترقية إلى الباقة غير المحدودة (1 دولار شهرياً)، تواصل مع @ObsidianAegis_Admin"
+    await update.message.reply_text(msg)
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     message_text = update.message.text
@@ -116,7 +115,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         traditional = analyze_traditional(message_text)
         final_msg = f"🛡️ تحليل تقليدي (احتياطي):\n{traditional}\n\n---\n🔒 فحص بواسطة Obsidian Aegis"
 
-    # محاولة إرسال بتنسيق Markdown أولاً، وإذا فشل نرسل كـ plain text
     try:
         await update.message.reply_text(final_msg, parse_mode='Markdown')
     except Exception:
