@@ -21,12 +21,27 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 
 MODEL_NAME = "gemini-2.0-flash"
 
-# قائمة سوداء مبدئية (للاستخدام إذا فشل الذكاء الاصطناعي)
+# ================== الثوابت العامة (Pre-compiled) ==================
 BLACKLISTED_DOMAINS = [
     "example-scam.com",
     "free-iphone-win.xyz",
     "secure-your-account.info"
 ]
+
+KEYWORDS_REGEX = re.compile(
+    r"\b(?:login|verify|account|password|free|win|gift|confirm|update|"
+    r"bank|wallet|urgent|limited|bonus|crypto|bitcoin|otp|paypal|"
+    r"security|reset|telegram|whatsapp|prize|reward)\b",
+    re.IGNORECASE
+)
+
+URGENCY_REGEX = re.compile(
+    r"\b(?:urgent|immediately|now|verify now|act now|"
+    r"حالاً|فوراً|آخر فرصة|سيتم إغلاق حسابك|تحرك الآن)\b",
+    re.IGNORECASE
+)
+
+IP_REGEX = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
 
 # ================== إعداد التسجيل ==================
 logging.basicConfig(
@@ -64,22 +79,118 @@ async def analyze_with_gemini(text: str) -> str | None:
         logger.error(f"خطأ في Gemini: {e}")
         return None
 
-# ================== التحليل التقليدي (احتياطي) ==================
+# ================== التحليل التقليدي (احتياطي متقدم) ==================
 def analyze_traditional(text: str) -> str:
-    urls = re.findall(r'(https?://\S+)', text)
-    if not urls:
-        return "✅ لم أجد أي روابط. الرسالة تبدو عادية، لكن كن حذراً دائماً."
-
+    urls = re.findall(r'(https?://[^\s]+)', text)
     findings = []
-    for url in urls:
-        domain = urlparse(url).netloc.lower()
-        if any(blocked in domain for blocked in BLACKLISTED_DOMAINS):
-            findings.append(f"🚨 رابط خطير (قائمة سوداء): {url}")
-        elif any(kw in url.lower() for kw in ["login", "verify", "account", "password", "free"]):
-            findings.append(f"⚠️ رابط مشبوه (كلمات حساسة): {url}")
+    risk_score = 0
+
+    suspicious_tlds = [
+        '.tk', '.ml', '.ga', '.cf',
+        '.xyz', '.info', '.top', '.gq'
+    ]
+    url_shorteners = [
+        'bit.ly', 'tinyurl.com',
+        't.co', 'goo.gl',
+        'ow.ly', 'is.gd',
+        'cutt.ly', 'rb.gy'
+    ]
+    famous_brands = [
+        "paypal", "google", "facebook",
+        "instagram", "telegram",
+        "microsoft", "apple",
+        "amazon", "binance"
+    ]
+
+    # ================== 1. تحليل النص ==================
+    matched_keywords = list(set(KEYWORDS_REGEX.findall(text)))
+    if matched_keywords:
+        risk_score += len(matched_keywords) * 8
+        findings.append(f"⚠️ كلمات تصيد مكتشفة: {', '.join(matched_keywords[:6])}")
+
+    matched_urgency = URGENCY_REGEX.findall(text)
+    if matched_urgency:
+        risk_score += 20
+        findings.append("⚠️ الرسالة تستخدم أسلوب الضغط والاستعجال.")
+
+    # ================== 2. تحليل الروابط ==================
+    if not urls:
+        if risk_score >= 30:
+            findings.append("⚠️ رغم عدم وجود روابط، صياغة الرسالة مشبوهة.")
         else:
-            findings.append(f"ℹ️ رابط يبدو آمناً: {url}")
-    return "\n".join(findings)
+            findings.append("✅ لم يتم العثور على روابط داخل الرسالة.")
+
+    for url in urls:
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower().replace("www.", "")
+
+            # القائمة السوداء
+            if any(blocked in domain for blocked in BLACKLISTED_DOMAINS):
+                findings.append(f"🚨 خطر مؤكد: {domain} موجود بالقائمة السوداء.")
+                risk_score += 100
+                continue
+
+            # دومين IP
+            if IP_REGEX.match(domain):
+                findings.append(f"🚨 الرابط يستخدم IP مباشر بدلاً من دومين.")
+                risk_score += 45
+
+            # امتدادات خطيرة
+            if any(domain.endswith(tld) for tld in suspicious_tlds):
+                findings.append(f"⚠️ امتداد نطاق مشبوه: {domain}")
+                risk_score += 25
+
+            # روابط مختصرة
+            if any(short in domain for short in url_shorteners):
+                findings.append(f"⚠️ الرابط مختصر ويخفي الوجهة الحقيقية.")
+                risk_score += 20
+
+            # كثرة الشرطات
+            if domain.count("-") >= 3:
+                findings.append(f"⚠️ الدومين يحتوي شرطات كثيرة (نمط تصيد شائع).")
+                risk_score += 15
+
+            # تقليد العلامات التجارية
+            for brand in famous_brands:
+                if brand in domain and not domain.endswith(f"{brand}.com"):
+                    findings.append(f"⚠️ احتمال انتحال علامة تجارية: {domain}")
+                    risk_score += 40
+                    break
+
+            # روابط طويلة جدًا
+            if len(url) > 120:
+                findings.append("⚠️ الرابط طويل بشكل غير طبيعي.")
+                risk_score += 10
+
+            # وجود @ داخل الرابط
+            if "@" in url:
+                findings.append("🚨 الرابط يحتوي @ لإخفاء الوجهة الحقيقية.")
+                risk_score += 35
+
+            # كلمات حساسة داخل الرابط
+            if KEYWORDS_REGEX.findall(url):
+                findings.append(f"⚠️ الرابط يحتوي كلمات حساسة.")
+                risk_score += 15
+
+        except Exception:
+            findings.append(f"⚠️ فشل تحليل الرابط: {url}")
+            risk_score += 5
+
+    # ================== 3. التقييم النهائي ==================
+    if risk_score >= 120:
+        verdict = "🚨 خطر عالي جداً — الرابط أو الرسالة يُحتمل أنها حملة تصيد أو احتيال."
+    elif risk_score >= 70:
+        verdict = "⚠️ الرسالة مشبوهة بدرجة كبيرة."
+    elif risk_score >= 35:
+        verdict = "⚠️ توجد مؤشرات مقلقة، تعامل بحذر."
+    elif risk_score > 0:
+        verdict = "ℹ️ لا توجد مؤشرات خطيرة قوية، لكن الحذر مطلوب."
+    else:
+        verdict = "✅ لم نكتشف أي مؤشرات خطيرة واضحة."
+
+    findings.append(f"\n{verdict}\n🎯 درجة الخطر: {risk_score}/150")
+    return "\n\n".join(findings)
 
 # ================== أوامر البوت ==================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
