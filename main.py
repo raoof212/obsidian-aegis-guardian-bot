@@ -54,16 +54,19 @@ async def analyze_with_gemini(text: str) -> str | None:
     """
 
     try:
+        logger.info(f"🚀 محاولة استدعاء Gemini بالنموذج: {MODEL_NAME}")
         response = client.models.generate_content(
             model=MODEL_NAME,
             contents=prompt
         )
+        logger.info(f"✅ استجابة Gemini الخام: {response}")
         result = response.text.strip()
         if not result:
+            logger.warning("⚠️ استجابة Gemini فارغة")
             return None
         return f"🧠 **تحليل ذكي:**\n{result}"
     except Exception as e:
-        logger.error(f"خطأ في Gemini: {e}")
+        logger.error(f"❌ خطأ في Gemini: {type(e).__name__} - {e}")
         return None
 
 # ================== التحليل التقليدي (احتياطي) ==================
