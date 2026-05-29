@@ -102,10 +102,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     await update.message.reply_text(welcome_msg, parse_mode='Markdown')
 
-async def upgrade(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = "🚀 للترقية إلى الباقة غير المحدودة (1 دولار شهرياً)، تواصل مع @ObsidianAegis_Admin"
-    await update.message.reply_text(msg)
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     message_text = update.message.text
@@ -115,12 +111,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ai_analysis = await analyze_with_gemini(message_text)
 
     if ai_analysis:
-        final_msg = f"{ai_analysis}\n\n---\n🔒 *فحص بواسطة Obsidian Aegis*"
+        final_msg = f"{ai_analysis}\n\n---\n🔒 فحص بواسطة Obsidian Aegis"
     else:
         traditional = analyze_traditional(message_text)
-        final_msg = f"🛡️ **تحليل تقليدي (احتياطي):**\n{traditional}\n\n---\n🔒 *فحص بواسطة Obsidian Aegis*"
+        final_msg = f"🛡️ تحليل تقليدي (احتياطي):\n{traditional}\n\n---\n🔒 فحص بواسطة Obsidian Aegis"
 
-    await update.message.reply_text(final_msg, parse_mode='Markdown')
+    # محاولة إرسال بتنسيق Markdown أولاً، وإذا فشل نرسل كـ plain text
+    try:
+        await update.message.reply_text(final_msg, parse_mode='Markdown')
+    except Exception:
+        await update.message.reply_text(final_msg)
 
 # ================== بدء التشغيل ==================
 def main():
